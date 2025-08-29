@@ -2055,16 +2055,6 @@ const WorkOrders = () => {
     return icons[status] || '📋';
   };
 
-  const showOrderDetails = async (orderId) => {
-    try {
-      const response = await axios.get(`${API}/work-orders/${orderId}`);
-      setSelectedOrder(response.data);
-      setShowDetails(true);
-    } catch (error) {
-      alert('Hiba: ' + (error.response?.data?.detail || 'Nem sikerült betölteni'));
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
