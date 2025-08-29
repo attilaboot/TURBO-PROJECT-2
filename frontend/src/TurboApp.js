@@ -2208,7 +2208,7 @@ const WorkOrders = () => {
                         👁️ Részletek
                       </button>
                       <button
-                        onClick={() => window.open(`/work-orders/${order.id}/print`, '_blank')}
+                        onClick={() => window.open(`${API}/work-orders/${order.id}/pdf`, '_blank')}
                         className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 text-xs"
                       >
                         🖨️ Nyomtat
