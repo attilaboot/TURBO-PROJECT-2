@@ -3835,6 +3835,314 @@ const Parts = () => {
   );
 };
 
+// WorkOrder Detail Component
+const WorkOrderDetail = () => {
+  const [workOrder, setWorkOrder] = useState(null);
+  const [client, setClient] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  
+  // Mocked workOrderId - in real app this would come from URL params
+  const workOrderId = new URLSearchParams(window.location.search).get('id');
+
+  useEffect(() => {
+    loadWorkOrderDetail();
+  }, [workOrderId]);
+
+  const loadWorkOrderDetail = async () => {
+    if (!workOrderId) return;
+    
+    try {
+      // Load work order
+      const orderResponse = await axios.get(`${API}/work-orders/${workOrderId}`);
+      const orderData = orderResponse.data;
+      setWorkOrder(orderData);
+      
+      // Load client
+      const clientResponse = await axios.get(`${API}/clients/${orderData.client_id}`);
+      setClient(clientResponse.data);
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Hiba a munkalap betöltésekor:', error);
+      setLoading(false);
+    }
+  };
+
+  const handlePrintHTML = () => {
+    window.print();
+  };
+
+  const handlePrintPDF = () => {
+    if (workOrder) {
+      window.open(`${API}/work-orders/${workOrder.id}/pdf`, '_blank');
+    }
+  };
+
+  const getStatusColor = (status) => {
+    return statusColors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Munkalap betöltése...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!workOrder || !client) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Munkalap nem található</h2>
+          <Link to="/work-orders" className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600">
+            ← Vissza a munkalapokhoz
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header with Actions */}
+        <div className="flex justify-between items-center mb-8 print:hidden">
+          <div className="flex items-center gap-4">
+            <Link to="/work-orders" className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+              ← Vissza a főoldalra
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">Munkalap #{workOrder.work_number}</h1>
+              <p className="text-gray-600">Részletes információk</p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPrintOptions(!showPrintOptions)}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-medium"
+            >
+              🖨️ Nyomtatás
+            </button>
+            <Link 
+              to={`/edit-work-order?id=${workOrder.id}`}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium"
+            >
+              ✏️ Szerkesztés
+            </Link>
+          </div>
+        </div>
+
+        {/* Print Options */}
+        {showPrintOptions && (
+          <div className="mb-6 p-4 bg-white rounded-lg shadow-md print:hidden">
+            <h3 className="font-semibold mb-3">Nyomtatási opciók:</h3>
+            <div className="flex gap-4">
+              <button
+                onClick={handlePrintHTML}
+                className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 font-medium flex items-center gap-2"
+              >
+                🖨️ HTML Nyomtatás
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                className="bg-red-500 text-white px-6 py-3 rounded hover:bg-red-600 font-medium flex items-center gap-2"
+              >
+                📄 PDF Letöltés
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mt-2">
+              HTML nyomtatás: Böngésző nyomtatás funkciója | PDF letöltés: Formázott PDF fájl
+            </p>
+          </div>
+        )}
+
+        {/* Work Order Content */}
+        <div className="bg-white rounded-lg shadow-md p-8 print:shadow-none print:rounded-none">
+          {/* Print Header */}
+          <div className="hidden print:block text-center mb-6 border-b-2 border-gray-800 pb-4">
+            <h1 className="text-2xl font-bold mb-2">🔧 TURBÓ SZERVIZ</h1>
+            <p className="text-gray-600">Turbófeltöltő javítás és karbantartás</p>
+            <div className="text-xl font-bold mt-2">MUNKALAP #{workOrder.work_number}</div>
+          </div>
+
+          {/* Client and Vehicle Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div>
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">👤 Ügyfél adatok</h3>
+              <div className="space-y-2">
+                <p><strong>Név:</strong> {client.name}</p>
+                <p><strong>Telefon:</strong> {client.phone}</p>
+                {client.email && <p><strong>Email:</strong> {client.email}</p>}
+                {client.address && <p><strong>Cím:</strong> {client.address}</p>}
+                {client.company_name && <p><strong>Cégnév:</strong> {client.company_name}</p>}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">🚗 Jármű adatok</h3>
+              <div className="space-y-2">
+                <p><strong>Márka:</strong> {workOrder.car_make}</p>
+                <p><strong>Típus:</strong> {workOrder.car_model}</p>
+                {workOrder.car_year && <p><strong>Évjárat:</strong> {workOrder.car_year}</p>}
+                {workOrder.engine_code && <p><strong>Motorkód:</strong> {workOrder.engine_code}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Turbo Info */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold border-b pb-2 mb-4">🔧 Turbó információk</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <p><strong>Turbó kód:</strong> {workOrder.turbo_code}</p>
+              <p><strong>Beérkezés dátuma:</strong> {workOrder.received_date}</p>
+            </div>
+            {workOrder.general_notes && (
+              <div className="mt-4">
+                <p><strong>Megjegyzések:</strong></p>
+                <div className="bg-gray-50 p-3 rounded mt-2">
+                  {workOrder.general_notes}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Parts */}
+          {workOrder.parts && workOrder.parts.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">🔩 Kiválasztott alkatrészek</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alkatrész kód</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategória</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Szállító</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ár (LEI)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kiválasztva</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {workOrder.parts.map((part, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 whitespace-nowrap font-mono text-sm">{part.part_code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{part.category}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{part.supplier}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{part.price.toLocaleString('ro-RO')} LEI</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {part.selected ? (
+                            <span className="text-green-600 font-bold">✓</span>
+                          ) : (
+                            <span className="text-red-600">✗</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Work Processes */}
+          {workOrder.processes && workOrder.processes.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">⚙️ Munkafolyamatok</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Folyamat</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategória</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Idő (perc)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ár (LEI)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kiválasztva</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {workOrder.processes.map((process, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{process.process_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{process.category}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{process.estimated_time}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{process.price.toLocaleString('ro-RO')} LEI</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {process.selected ? (
+                            <span className="text-green-600 font-bold">✓</span>
+                          ) : (
+                            <span className="text-red-600">✗</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Status and Pricing */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">📊 Státusz információk</h3>
+              <div className="space-y-3">
+                <div>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(workOrder.status)}`}>
+                    {statusTranslations[workOrder.status] || workOrder.status}
+                  </span>
+                </div>
+                <p><strong>Árajánlat küldve:</strong> {workOrder.quote_sent ? 'Igen' : 'Nem'}</p>
+                <p><strong>Árajánlat elfogadva:</strong> {workOrder.quote_accepted ? 'Igen' : 'Nem'}</p>
+                {workOrder.estimated_completion && (
+                  <p><strong>Becsült készre kerülés:</strong> {workOrder.estimated_completion}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold border-b pb-2 mb-4">💰 Árazás</h3>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Tisztítás:</span>
+                    <span>{workOrder.cleaning_price.toLocaleString('ro-RO')} LEI</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Felújítás:</span>
+                    <span>{workOrder.reconditioning_price.toLocaleString('ro-RO')} LEI</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Turbó:</span>
+                    <span>{workOrder.turbo_price.toLocaleString('ro-RO')} LEI</span>
+                  </div>
+                  <hr className="my-3" />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Összesen:</span>
+                    <span>{(workOrder.cleaning_price + workOrder.reconditioning_price + workOrder.turbo_price).toLocaleString('ro-RO')} LEI</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center mt-8 pt-6 border-t text-sm text-gray-500">
+            <p>Létrehozva: {new Date(workOrder.created_at).toLocaleString('hu-HU')}</p>
+            <p>Utoljára frissítve: {new Date(workOrder.updated_at).toLocaleString('hu-HU')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // Main App Component
 function TurboApp() {
   return (
