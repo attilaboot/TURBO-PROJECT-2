@@ -745,6 +745,281 @@ async def initialize_data():
     return {"message": "Alapadatok inicializálva"}
 
 
+# Printing endpoints
+@api_router.get("/work-orders/{work_order_id}/pdf")
+async def generate_work_order_pdf(work_order_id: str):
+    from weasyprint import HTML, CSS
+    from jinja2 import Template
+    from fastapi.responses import Response
+    
+    # Get work order with client details
+    work_order = await db.work_orders.find_one({"id": work_order_id})
+    if not work_order:
+        raise HTTPException(status_code=404, detail="Munkalap nem található")
+    
+    client = await db.clients.find_one({"id": work_order["client_id"]})
+    if not client:
+        raise HTTPException(status_code=404, detail="Ügyfél nem található")
+    
+    # PDF Template for work order
+    pdf_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; }
+            .company-info { text-align: center; margin-bottom: 20px; }
+            .work-number { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px; }
+            .section { margin-bottom: 20px; }
+            .section h3 { background-color: #f5f5f5; padding: 8px; margin: 0 0 10px 0; border-left: 4px solid #333; }
+            .grid { display: flex; gap: 20px; }
+            .column { flex: 1; }
+            .info-row { margin: 5px 0; }
+            .label { font-weight: bold; }
+            .parts-table, .process-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            .parts-table th, .parts-table td, .process-table th, .process-table td { 
+                border: 1px solid #ddd; padding: 8px; text-align: left; 
+            }
+            .parts-table th, .process-table th { background-color: #f5f5f5; font-weight: bold; }
+            .status { font-weight: bold; padding: 5px 10px; border-radius: 3px; color: white; }
+            .status.RECEIVED { background-color: #3b82f6; }
+            .status.IN_PROGRESS { background-color: #f59e0b; }
+            .status.QUOTED { background-color: #8b5cf6; }
+            .status.ACCEPTED { background-color: #10b981; }
+            .status.WORKING { background-color: #f97316; }
+            .status.READY { background-color: #14b8a6; }
+            .status.DELIVERED { background-color: #6b7280; }
+            .pricing { border: 2px solid #333; padding: 15px; background-color: #f9f9f9; }
+            .total { font-size: 1.3em; font-weight: bold; color: #333; }
+            .footer { text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company-info">
+                <h1>🔧 TURBÓ SZERVIZ</h1>
+                <p>Turbófeltöltő javítás és karbantartás</p>
+            </div>
+            <div class="work-number">MUNKALAP #{{ work_order.work_number }}</div>
+        </div>
+
+        <div class="grid">
+            <div class="column">
+                <div class="section">
+                    <h3>👤 Ügyfél adatok</h3>
+                    <div class="info-row">
+                        <span class="label">Név:</span> {{ client.name }}
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Telefon:</span> {{ client.phone }}
+                    </div>
+                    {% if client.address %}
+                    <div class="info-row">
+                        <span class="label">Cím:</span> {{ client.address }}
+                    </div>
+                    {% endif %}
+                    {% if client.company_name %}
+                    <div class="info-row">
+                        <span class="label">Cégnév:</span> {{ client.company_name }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="column">
+                <div class="section">
+                    <h3>🚗 Jármű adatok</h3>
+                    <div class="info-row">
+                        <span class="label">Márka:</span> {{ work_order.car_make }}
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Típus:</span> {{ work_order.car_model }}
+                    </div>
+                    {% if work_order.car_year %}
+                    <div class="info-row">
+                        <span class="label">Évjárat:</span> {{ work_order.car_year }}
+                    </div>
+                    {% endif %}
+                    {% if work_order.engine_code %}
+                    <div class="info-row">
+                        <span class="label">Motorkód:</span> {{ work_order.engine_code }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔧 Turbó információk</h3>
+            <div class="info-row">
+                <span class="label">Turbó kód:</span> {{ work_order.turbo_code }}
+            </div>
+            <div class="info-row">
+                <span class="label">Beérkezés dátuma:</span> {{ work_order.received_date }}
+            </div>
+            {% if work_order.general_notes %}
+            <div class="info-row">
+                <span class="label">Megjegyzések:</span> {{ work_order.general_notes }}
+            </div>
+            {% endif %}
+        </div>
+
+        {% if work_order.parts %}
+        <div class="section">
+            <h3>🔩 Kiválasztott alkatrészek</h3>
+            <table class="parts-table">
+                <thead>
+                    <tr>
+                        <th>Alkatrész kód</th>
+                        <th>Kategória</th>
+                        <th>Szállító</th>
+                        <th>Ár (LEI)</th>
+                        <th>Kiválasztva</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for part in work_order.parts %}
+                    <tr>
+                        <td>{{ part.part_code }}</td>
+                        <td>{{ part.category }}</td>
+                        <td>{{ part.supplier }}</td>
+                        <td>{{ "{:,.2f}".format(part.price) }}</td>
+                        <td>{{ "✓" if part.selected else "✗" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if work_order.processes %}
+        <div class="section">
+            <h3>⚙️ Munkafolyamatok</h3>
+            <table class="process-table">
+                <thead>
+                    <tr>
+                        <th>Folyamat</th>
+                        <th>Kategória</th>
+                        <th>Becsült idő (perc)</th>
+                        <th>Ár (LEI)</th>
+                        <th>Kiválasztva</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for process in work_order.processes %}
+                    <tr>
+                        <td>{{ process.process_name }}</td>
+                        <td>{{ process.category }}</td>
+                        <td>{{ process.estimated_time }}</td>
+                        <td>{{ "{:,.2f}".format(process.price) }}</td>
+                        <td>{{ "✓" if process.selected else "✗" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="grid">
+            <div class="column">
+                <div class="section">
+                    <h3>📊 Státusz információk</h3>
+                    <div class="status {{ work_order.status }}">{{ status_text }}</div>
+                    <div class="info-row" style="margin-top: 10px;">
+                        <span class="label">Árajánlat küldve:</span> {{ "Igen" if work_order.quote_sent else "Nem" }}
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Árajánlat elfogadva:</span> {{ "Igen" if work_order.quote_accepted else "Nem" }}
+                    </div>
+                    {% if work_order.estimated_completion %}
+                    <div class="info-row">
+                        <span class="label">Becsült készre kerülés:</span> {{ work_order.estimated_completion }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="column">
+                <div class="section pricing">
+                    <h3>💰 Árazás</h3>
+                    <div class="info-row">
+                        <span class="label">Tisztítás:</span> {{ "{:,.2f}".format(work_order.cleaning_price) }} LEI
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Felújítás:</span> {{ "{:,.2f}".format(work_order.reconditioning_price) }} LEI
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Turbó:</span> {{ "{:,.2f}".format(work_order.turbo_price) }} LEI
+                    </div>
+                    <hr style="margin: 10px 0;">
+                    <div class="info-row total">
+                        <span class="label">Összesen:</span> {{ "{:,.2f}".format(total_amount) }} LEI
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Munkalap generálva: {{ now.strftime("%Y-%m-%d %H:%M:%S") }}</p>
+            <p>🔧 Turbó Szerviz Kezelő Rendszer</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    # Status translations
+    status_translations = {
+        'RECEIVED': 'Beérkezett',
+        'IN_PROGRESS': 'Vizsgálat alatt',
+        'QUOTED': 'Árajánlat készült',
+        'ACCEPTED': 'Elfogadva',
+        'REJECTED': 'Elutasítva',
+        'WORKING': 'Javítás alatt',
+        'READY': 'Kész',
+        'DELIVERED': 'Átvett'
+    }
+    
+    # Calculate total amount
+    total_amount = work_order.get("cleaning_price", 0) + work_order.get("reconditioning_price", 0) + work_order.get("turbo_price", 0)
+    
+    # Render template
+    template = Template(pdf_template)
+    html_content = template.render(
+        work_order=work_order,
+        client=client,
+        status_text=status_translations.get(work_order["status"], work_order["status"]),
+        total_amount=total_amount,
+        now=datetime.utcnow()
+    )
+    
+    # Generate PDF
+    pdf_bytes = HTML(string=html_content).write_pdf()
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=munkalap_{work_order['work_number']}.pdf"}
+    )
+
+@api_router.get("/work-orders/{work_order_id}/print-data")
+async def get_work_order_print_data(work_order_id: str):
+    """Get print data for work order"""
+    work_order = await db.work_orders.find_one({"id": work_order_id})
+    if not work_order:
+        raise HTTPException(status_code=404, detail="Munkalap nem található")
+    
+    client = await db.clients.find_one({"id": work_order["client_id"]})
+    if not client:
+        raise HTTPException(status_code=404, detail="Ügyfél nem található")
+    
+    return {
+        "work_order": work_order,
+        "client": client
+    }
+
+
 # Include router
 app.include_router(api_router)
 
