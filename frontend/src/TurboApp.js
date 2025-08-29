@@ -2019,6 +2019,10 @@ const WorkOrders = () => {
     handleSearch();
   }, [searchTerm, statusFilter, workOrders]);
 
+  const showOrderDetails = (orderId) => {
+    window.location.href = `/work-order-detail?id=${orderId}`;
+  };
+
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       await axios.put(`${API}/work-orders/${orderId}`, { status: newStatus });
